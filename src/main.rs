@@ -84,7 +84,7 @@ fn main() {
   let currency = get_currency("usd");
 
   println!("Balance: {:?} zec", balance);
-  println!("         {:?} usd", balance * currency);
+  println!("         {:.2} usd", balance * currency);
 }
 
 fn is_zcash_addr(val: String) -> Result<(), String> {
