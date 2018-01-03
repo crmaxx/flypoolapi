@@ -1,0 +1,15 @@
+[package]
+name = "fbc"
+version = "0.1.0"
+authors = ["Maxim Zhukov <crmaxx@gmail.com>"]
+
+[dependencies]
+ansi_term = "0.9"
+clap = "~2.29"
+base58 = "0.1.0"
+rust-crypto = "0.2.36"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+reqwest = "~0.8"
+error-chain = "~0.11"
