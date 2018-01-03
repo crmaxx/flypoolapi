@@ -21,13 +21,15 @@ use crypto::sha2::Sha256;
 
 use std::io::Read;
 
-#[derive(Serialize, Deserialize, Debug)]
+const API_KEY: &'static str = "QmD9jz3SX4iCu73gmEcmVQe3TjKbki";
+
+#[derive(Deserialize, Debug)]
 struct Payouts {
   status: String,
   data: Vec<Data>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Data {
   start: i64,
@@ -37,44 +39,51 @@ struct Data {
   paid_on: i64,
 }
 
+#[derive(Deserialize, Debug)]
+struct Ticker {
+  Markets: Vec<Markets>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Markets {
+  Label: String,
+  Name: String,
+  Price: f64,
+  Volume_24h: f64,
+  Timestamp: i64,
+}
+
 fn main() {
-    let matches = App::new("fbc")
-                          .version(crate_version!())
-                          .author(crate_authors!())
-                          .about("flypool balance checker")
-                          .arg(Arg::from_usage("-w, --wallet=[WALLET_ID] 'Sets wallet id for check'")
-                                      .required(true)
-                                      .validator(is_zcash_addr))
-                          .arg(Arg::from_usage("-d, --debug 'Enable debug'"))
-                          .get_matches();
+  let matches = App::new("fbc")
+                        .version(crate_version!())
+                        .author(crate_authors!())
+                        .about("flypool balance checker")
+                        .arg(Arg::from_usage("-w, --wallet=[WALLET_ID] 'Sets wallet id for check'")
+                                    .required(true)
+                                    .validator(is_zcash_addr))
+                        .arg(Arg::from_usage("-d, --debug 'Enable debug'"))
+                        .get_matches();
 
-    if matches.is_present("debug") {
-      println!("Debugging mode is: {}", Style::new().fg(Green).paint("ON"));
-    } else {
-      println!("Debugging mode is: {}", Style::new().fg(Yellow).paint("OFF"));
-    }
+  if matches.is_present("debug") {
+    println!("Debugging mode is: {}", Style::new().fg(Green).paint("ON"));
+  } else {
+    println!("Debugging mode is: {}", Style::new().fg(Yellow).paint("OFF"));
+  }
 
-    if let Some(wallet) = matches.value_of("wallet") {
-      println!("Value for wallet: {}", Style::new().fg(Green).paint(wallet));
-      // begin scope issue
-      let endpoint = "https://api-zcash.flypool.org";
-      let url = vec!(endpoint, "miner", wallet, "payouts");
-      let mut resp = reqwest::get(&url.join("/")).unwrap();
-      if resp.status().is_success() {
-        let mut body = String::new();
-        resp.read_to_string(&mut body).unwrap();
-        let p: Payouts = serde_json::from_str(&body).unwrap();
-        let amount = |d: &Data| d.amount;
-        let amounts: Vec<i64> = p.data.iter().map(amount).collect();
-        let sum: i64 = amounts.iter().sum();
-        let balance: f64 = sum as f64 / 100000000.0;
-        println!("{:?}", balance);
-      }
-      // end scope issue
-    } else {
-      println!("{}", Style::new().fg(Red).paint("Set value for wallet"));
-      std::process::exit(1);
-    }
+  let wallet = matches.value_of("wallet").unwrap();
+
+  if !wallet.trim().is_empty() {
+    println!("Value for wallet: {}", Style::new().fg(Green).paint(wallet));
+  } else {
+    println!("{}", Style::new().fg(Red).paint("Set value for wallet"));
+    std::process::exit(1);
+  }
+
+  let balance = get_balance(wallet);
+  let currency = get_currency("usd");
+
+  println!("Balance: {:?} zec", balance);
+  println!("         {:?} usd", balance * currency);
 }
 
 fn is_zcash_addr(val: String) -> Result<(), String> {
@@ -107,4 +116,36 @@ fn double_sha256(payload: &[u8]) -> Vec<u8> {
     hasher.input(&hash);
     hasher.result(&mut hash);
     hash.to_vec()
+}
+
+fn get_balance(wallet: &str) -> f64 {
+  let endpoint = "https://api-zcash.flypool.org";
+  let url = vec!(endpoint, "miner", wallet, "payouts");
+  let mut resp = reqwest::get(&url.join("/")).unwrap();
+  let mut balance: f64 = 0.0;
+  if resp.status().is_success() {
+    let mut body = String::new();
+    resp.read_to_string(&mut body).unwrap();
+    let p: Payouts = serde_json::from_str(&body).unwrap();
+    let amount = |d: &Data| d.amount;
+    let amounts: Vec<i64> = p.data.iter().map(amount).collect();
+    let sum: i64 = amounts.iter().sum();
+    balance = sum as f64 / 100000000.0;
+  }
+  return balance
+}
+
+fn get_currency(fiat: &str) -> f64 {
+  let endpoint = "https://www.worldcoinindex.com/apiservice/ticker";
+  let label = "zecbtc";
+  let url = format!("{}?key={}&label={}&fiat={}", endpoint, API_KEY, label, fiat);
+  let mut resp = reqwest::get(&url).unwrap();
+  let mut volume: f64 = 0.0;
+  if resp.status().is_success() {
+    let mut body = String::new();
+    resp.read_to_string(&mut body).unwrap();
+    let t: Ticker = serde_json::from_str(&body).unwrap();
+    volume = t.Markets[0].Price;
+  }
+  return volume;
 }
