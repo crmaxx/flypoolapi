@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 // cli
 extern crate ansi_term;
 #[macro_use] extern crate clap;
